@@ -1,25 +1,21 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
-#include<assert.h>
+#include<ctype.h> // Para usar isspace()
 #define NCMD 10
 
 int i, j, k;
-//Cadena leida de teclado y su tamaño
-char * inshell;
+char * tmp1, * tmp2;
+//Para leer cadena del usuario
+char * inshell; 
 size_t len;
-//Cadenas temporales para analizar el comando
-char * tmpipe;      //Cadena temporal
-char * strpipe[10]; //Almacena los comandos unidos por pipes
-int numcmds;        //Num de comandos guardados
-char ** apcmd;      //Apuntador iterador
 
-int iless, igreat;  //Index de '<' y '>' en la cadena
-char * busqueda;
-char * tmpcmd;
-
-char * tmparams;
-
+//Cadenas para identificar los comandos
+char * cadena, * comando, * ejecutable, * parametros, * busq1, * busq2;
+char * programas[NCMD];
+char ** strptr;
+int numprogramas, numIO, ultimo;
+int igreat, iless;
 
 //Struct donde se almacena lo que se entregara a exec
 typedef struct com com;
@@ -38,88 +34,127 @@ int main()
 {
     do
     {
-        //Se le la linea del usuario
+        numprogramas = 0;
+        //Se lee la linea del usuario
         getline(&inshell, &len, stdin);
         //Remueve el salto de linea
         inshell[strcspn(inshell, "\n")] = 0; 
-        tmpipe = strdup(inshell);
-        //Separa los comandos basado en los pipes
-        numcmds =0;
-        for(apcmd = strpipe; (*apcmd = strsep(&tmpipe, "|")) != NULL; )
+        cadena = strdup(inshell);
+        //Se verifica si tiene pipes la cadena
+        if(strchr(cadena, '|')!=NULL) 
         {
-            if(**apcmd  != '\0')
-            { 
-                numcmds++;
-                if(++apcmd>= &strpipe[NCMD]) { break; }
-            }
-        }
-        //Extrae de cada comando sus redireccionamientos
-
-        for(k=0;k<numcmds;k++)
-        {
-            printf("Comando %i\n", k+1);
-            igreat = 0; iless = 0; j=0;
-            //Obtiene el indice de <
-            tmpipe = strchr(strpipe[k], '<');
-            if(tmpipe != NULL) { iless  = (int)(tmpipe - inshell); }
-            else { iless = 0;}
-            //Obtiene el indice de >
-            tmpipe = strchr(strpipe[k], '>');
-            if(tmpipe!= NULL) { igreat = (int)(tmpipe - inshell); }
-            else { igreat = 0;}
-            // Se manejan los casos de < y >
-            if(igreat < iless)
-            { 
-                busqueda = strdup(">");
-                j = 1;
-            }
-            else if(iless < igreat)
-            { 
-                busqueda = strdup("<");
-                j = -1;
-            }
-
-            //Separa los archivos de entrada y salida y los asigna en coms
-            if(j != 0)
+            //Si tiene, se separa la cadena por pipes
+            for(strptr = programas;(*strptr = strsep(&cadena, "|")) !=NULL;)
             {
-                tmpipe = strdup(strpipe[k]);
-                tmpcmd = strsep(&tmpipe, busqueda);
-                tmparams = strdup(tmpcmd);
-                if(j == 1)
-                { 
-                    busqueda = strdup("<"); 
-                    tmpcmd = strsep(&tmpipe, busqueda);
-                    printf("Abriendo archivo para input:%s\n", tmpcmd);
-                    comandos[k].input = fopen(tmpcmd, "r");
-                    tmpcmd = strsep(&tmpipe, busqueda);
-                    printf("Abriendo archivo para output:%s\n", tmpcmd);
-                    comandos[k].output = fopen(tmpcmd, "w");
-                }
-                else
-                { 
-                    busqueda = strdup(">"); 
-                    tmpcmd = strsep(&tmpipe, busqueda);
-                    printf("Abriendo archivo para output:%s\n", tmpcmd);
-                    comandos[k].output = fopen(tmpcmd, "w");
-                    tmpcmd = strsep(&tmpipe, busqueda);
-                    printf("Abriendo archivo para input:%s\n", tmpcmd);
-                    comandos[k].input = fopen(tmpcmd, "r");
+                if(**strptr != '\0')
+                {
+                    numprogramas++;
+                    if(++strptr>= &programas[NCMD]) { break; }
                 }
             }
-            //tmpipe = strdup(tmparams);
-            do
+        }
+        else
+        {
+            //Si no tiene, se guarda como unico programa
+            numprogramas = 1;
+            programas[0] = strdup(cadena);
+        }
+        //Se analiza cada programa que es conectado por un pipe
+        for(i=0; i<numprogramas; i++)
+        {
+            //Prueba
+            printf("\n\n");
+            numIO = 0;
+            //Se buscan < y > y, de encontrarse, se guardan sus indices
+            tmp1 = strchr(programas[i], '<');
+            tmp2 = strchr(programas[i], '>');
+            if(tmp1!=NULL){
+                iless = (int)(tmp1 - programas[i]);
+                numIO++;
+            }
+            else { iless = 0; }
+            if(tmp2!=NULL){
+                igreat = (int)(tmp2 - programas[i]);
+                numIO++;
+            }
+            else { igreat = 0; }
+            //Pruebas
+            printf("Indice de <:%i\n", iless);
+            printf("Indice de >:%i\n", igreat);
+            printf("numIO:%i\n", numIO);
+
+            //Se parte el programa de acuerdo a el numero llaves
+            //y se asignan respectivamente a input y output
+            switch(numIO)
             {
-                tmpcmd = strsep(&tmparams, " ");
-                comandos[k].comando = strdup(tmpcmd);
-                if(tmparams != NULL)
-                    comandos[k].parametros = strdup(tmparams);
-            }while(strcmp(tmpcmd, "\0") == 0);
-            //if(tmpcmd == NULL) tmpcmd = strdup(tmpipe);
-            printf("Comando ingresado: %s\n",tmpcmd);
-            printf("Parametros del comando: %s\n",tmparams);
+                case 1:
+                    tmp1 = strdup(programas[i]);
+                    if(igreat == 0)
+                    {
+                        comando = strsep(&tmp1, "<");
+                        //comandos[i].input = fopen(*programas[i], 'r');
+                    }
+                    else
+                    {
+                        comando = strsep(&tmp1, ">");
+                        //comandos[i].output = fopen(*programas[i], 'r');
+                    }
+                    printf("archivo del programa:%s\n",tmp1);
+                    break;
+                case 2:
+                    //Se busca cual es la llave derecha
+                    ultimo = (igreat > iless) ? 2 : 1;
+                    //Se prepara el orden de las busquedas en comando
+                    if(ultimo==1){busq1 = strdup(">");busq2 = strdup("<");}
+                    else{ busq1 = strdup("<"); busq2 = strdup(">"); }
+                    //Se guardan las tres cadenas de acuerdo a su orden
+                    comando = strsep(&programas[i], busq1);
+                    if(ultimo==1)
+                    {
+                        tmp2 = strsep(&programas[i], busq2);
+                        tmp1 = programas[i];
+                    }
+                    else
+                    {
+                        tmp1 = strsep(&programas[i], busq2);
+                        tmp2 = programas[i];
+                    }
+                    //Se abren los archivos y se guardan sus apuntadores
+                    //en comando
+                    //comandos[i].input = fopen(tmp1, 'r');
+                    //comandos[i].output = fopen(tmp2, 'w');
+                    printf("input:%s\n",tmp1);
+                    printf("output:%s\n",tmp2);
+                    break;
+                default:
+                    comando = strdup(programas[i]);
+                    break;
+            }
+
+            //Remueve espacios antes del comando
+            while(isspace(*comando)) comando++;
+            //Verifica si el comando aun tiene espacios
+            if(strchr(comando, ' ')!=NULL) 
+            {
+                ejecutable = strsep(&comando, " ");
+                parametros = strdup(comando);
+            }
+            else
+            {
+                ejecutable = strdup(comando);
+            }
+
+            //Pruebas
+            printf("Programa %i:\n", i+1);
+            printf("Ejecutable: %s\n", ejecutable);
+            printf("Parametros: %s\n", parametros);
         }
 
-    } while(strcmp(comandos[0].comando, "exit") != 0);
+
+        //Pruebas (borrar)
+        printf("Cadena original:%s\n", inshell);
+    } while(comandos[0].comando==NULL);
+    //} while(strcmp(comandos[0].comando, "exit") != 0);
 
     
 
